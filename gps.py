@@ -156,6 +156,10 @@ def getRangesalt(data,site,maxgap=3,maxjump=2.0):
     return ranges
 ####################
 
+"""
+All the Satellite Bias stuff is copied directly from
+Bill Rideout, MIT
+"""
 
 class satelliteBias:
     """satelliteBias is a class to get satellite biases in tec units
@@ -496,7 +500,7 @@ def getSatXYZ(nav,sv,times):
            inputs are rinex navigation data, satellite number, and list of times
         Output: tuple of satellite position in ECEF coordinates (X,Y,Z)
         Algorithm: Based on http://web.ics.purdue.edu/~ecalais/teaching/geodesy/EAS_591T_2003_lab_4.htm
-        also based on Bill Rideout's tec.py
+        also based on Bill Rideout, MIT
     """
     allSvInfo = nav[nav['sv']==sv] 
     timesarray = np.asarray(times,dtype='datetime64[ms]')
@@ -583,7 +587,7 @@ def solveIter(mu,e):
     """__solvIter returns an iterative solution for Ek
     Mk = Ek - e sin(Ek)
     adapted to accept vectors instead of single values
-    from Bill Rideout's tec.py
+    from Bill Rideout, MIT
     """
     thisStart = np.asarray(mu-1.01*e)
     thisEnd = np.asarray(mu + 1.01*e)
@@ -839,7 +843,3 @@ def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,p
     
     
     return (d,coordnames,dataloc,sensorloc,times)
-    
-from glob import glob
-files = glob("/home/greg/Documents/greg/rinex/mah*.h5")
-gd = GDfromRinex('/home/greg/Documents/greg/rinex/mah62800.15o','./brdc2800.15n','jplg2800.15i','P1C11510.DCB',h5file=files[0],satlist=[9,23])

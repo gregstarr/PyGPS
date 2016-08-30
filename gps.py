@@ -156,10 +156,6 @@ def getRangesalt(data,site,maxgap=3,maxjump=2.0):
     return ranges
 ####################
 
-"""
-All the Satellite Bias stuff is copied directly from
-Bill Rideout, MIT
-"""
 
 class satelliteBias:
     """satelliteBias is a class to get satellite biases in tec units
@@ -500,7 +496,7 @@ def getSatXYZ(nav,sv,times):
            inputs are rinex navigation data, satellite number, and list of times
         Output: tuple of satellite position in ECEF coordinates (X,Y,Z)
         Algorithm: Based on http://web.ics.purdue.edu/~ecalais/teaching/geodesy/EAS_591T_2003_lab_4.htm
-        also based on Bill Rideout, MIT
+        also based on Bill Rideout's tec.py
     """
     allSvInfo = nav[nav['sv']==sv] 
     timesarray = np.asarray(times,dtype='datetime64[ms]')
@@ -587,7 +583,7 @@ def solveIter(mu,e):
     """__solvIter returns an iterative solution for Ek
     Mk = Ek - e sin(Ek)
     adapted to accept vectors instead of single values
-    from Bill Rideout, MIT
+    from Bill Rideout's tec.py
     """
     thisStart = np.asarray(mu-1.01*e)
     thisEnd = np.asarray(mu + 1.01*e)
@@ -749,7 +745,7 @@ def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,p
             teclist.append(tec)
             timelist.append(tec.index)
             errlist.append(err*np.ones(len(tec)))
-            pos+=len(tec)
+            pos+=len(tec)-1
             
         if len(teclist)==0 or len(timelist)==0:  
             continue
@@ -808,12 +804,13 @@ def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,p
     if(satlist==None): satlist = data.items
     for sv in satlist:
         msk = np.isfinite(data['TEC',sv,:,'data'])
-        lol = data[['L1','L2','C1','P2'],sv,:,'lli'][msk]
+        lol = data[['L1','L2','C1','P2'],sv,msk,'lli']
         lol[np.isnan(lol)] = 0
         lol = lol.astype(int)
         lol = np.logical_or.reduce((lol%2).T)
         lol = lol.astype(int)
-        lol[np.isfinite(data['cslip',sv,:,'data'][msk])] += 2
+        greg = np.isfinite(data['cslip',sv,msk,'data'].values)
+        lol[greg] += 2
         d['lol'].append(lol)
         d['TEC'].append(data['TEC',sv,:,'data'][msk])
         d['az2sat'].append(data['Az',sv,:,'data'][msk])
@@ -843,3 +840,11 @@ def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,p
     
     
     return (d,coordnames,dataloc,sensorloc,times)
+
+if __name__== '__main__':
+    gd = GDfromRinex('/home/greg/Documents/greg/rinex/mah72800.15o',
+                 '/home/greg/Documents/greg/brdc2800.15n',
+                 '/home/greg/Documents/greg/jplg2800.15i',
+                 '/home/greg/Documents/greg/P1C11510.DCB',
+                 '/home/greg/Documents/greg/rinex/mah72800.h5',
+                 False,130,[9,23])

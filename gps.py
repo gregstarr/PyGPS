@@ -7,8 +7,8 @@ reading was made by Michael Hirsch and Greg Starr
 """
 from __future__ import division,absolute_import,print_function
 import numpy as np
-from datetime import datetime, timedelta
-from pandas import DataFrame,Panel,Series,Panel4D
+from datetime import datetime
+from pandas import DataFrame,Series,Panel4D
 from pandas.io.pytables import read_hdf
 from os.path import splitext,expanduser,getsize
 from io import BytesIO
@@ -20,15 +20,9 @@ f1 = 1575.42E6 #MHz
 f2 = 1227.6E6  #MHz
 def getRanges(data,svn,maxgap=3,maxjump=1.0): 
     if c2p2(data,svn):
-        nans = np.logical_or.reduce((np.isnan(data['L1',svn,:,'data']),
-                                     np.isnan(data['L2',svn,:,'data']),
-                                     np.isnan(data['C1',svn,:,'data']),
-                                     np.isnan(data['C2',svn,:,'data'])))
+        nans = np.logical_or.reduce((np.isnan(data[['L1','L2','C1','C2'],svn,:,'data']).T))
     else:
-        nans = np.logical_or.reduce((np.isnan(data['L1',svn,:,'data']),
-                                     np.isnan(data['L2',svn,:,'data']),
-                                     np.isnan(data['C1',svn,:,'data']),
-                                     np.isnan(data['P2',svn,:,'data'])))
+        nans = np.logical_or.reduce((np.isnan(data[['L1','L2','C1','P2'],svn,:,'data']).T))
     inarc=False
     start=[]
     end=[]
@@ -55,27 +49,52 @@ def getRanges(data,svn,maxgap=3,maxjump=1.0):
     ranges = [(data.major_axis[a],data.major_axis[b]) for a,b in zip(start,end)]
 
     return ranges
+    
+def getIntervals(data,svn,maxgap=3,maxjump=1.2):
+    if c2p2(data,svn):
+        fin = np.where(np.logical_and.reduce((
+                       np.isfinite(data[['L1','L2','C1','C2'],svn,:,'data']).T)))[0]
+    else:
+        fin = np.where(np.logical_and.reduce((
+                       np.isfinite(data[['L1','L2','C1','P2'],svn,:,'data']).T)))[0]
+    ranges=[]
+    if len(fin)==0:
+        return ranges
+    phase=2.85E9*(data['L1',svn,:,'data']/f1-data['L2',svn,:,'data']/f2)
+    b=fin[0]
+    last=fin[0]
+    for i in fin[1:]:
+        if i-last>maxgap or abs(phase[i]-phase[last])>maxjump:
+            ranges.append((b,last))
+            b=i
+        last=i
+        if i==fin[-1]:
+            ranges.append((b,last))
+    ranges=[(data.major_axis[a[0]],data.major_axis[a[1]]) for a in ranges]
+    return ranges
+        
 
 def getTec(data,svn,drange,satbias=None):
     if c2p2(data,svn,drange):
-        diffRange = (2.85E9/3.0E8)*(
+        diffrange = (2.85E9/3.0E8)*(
             data['C2',svn,drange[0]:drange[1],'data']
             -data['C1',svn,drange[0]:drange[1],'data'])
     else:
-        diffRange = (2.85E9/3.0E8)*(
+        diffrange = (2.85E9/3.0E8)*(
             data['P2',svn,drange[0]:drange[1],'data']
             -data['C1',svn,drange[0]:drange[1],'data'])
         
     phase=2.85E9*(data['L1',svn,drange[0]:drange[1],'data']/f1
                   -data['L2',svn,drange[0]:drange[1],'data']/f2)        
         
-    diffList = sorted(phase-diffRange)
-    medianDiff = diffList[int(len(diffList)/2)]
-    distWidth = diffList[int(len(diffList)*.75)]-diffList[int(len(diffList)*.25)]
-    medianErr = distWidth/np.sqrt(len(diffList))
-    tec = phase - medianDiff
+    difflist = np.array(sorted(phase-diffrange))
+    difflist = difflist[np.isfinite(difflist)]
+    mediandiff = difflist[int(len(difflist)/2)]
+    distwidth = difflist[int(len(difflist)*.75)]-difflist[int(len(difflist)*.25)]
+    medianerr = distwidth/np.sqrt(len(difflist))
+    tec = phase - mediandiff
 
-    return tec,medianErr
+    return tec,medianerr
 
 
 def c2p2(data,svn,drange=(None,None)):
@@ -731,8 +750,9 @@ def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,p
         print(sv,end=' ')
         if((sv,1) not in svBiasObj.dict): continue
         satbias = svBiasObj.dict[(sv,1)]
+
         #get time intervals, points where there is good tec
-        ranges = getRanges(data,sv,maxjump=1.2)
+        ranges = getIntervals(data,sv)
         teclist = []
         timelist = []
         errlist=[]
@@ -745,11 +765,11 @@ def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,p
             teclist.append(tec)
             timelist.append(tec.index)
             errlist.append(err*np.ones(len(tec)))
-            pos+=len(tec)-1
+            pos+=len(tec) 
             
         if len(teclist)==0 or len(timelist)==0:  
             continue
-        
+                        
         stec = Series(np.hstack((p for p in teclist)),index=np.hstack((t for t in timelist)))
         ntec = Series(np.hstack((j for j in errlist)),index=np.hstack((t for t in timelist)))
         for i,p in enumerate(rbeg):
@@ -792,25 +812,28 @@ def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,p
     print('recbias',end=': ')
     recbias = minScalBias(data,recpos) #calculate receiver bias
     extra[6,:,:,0] -= recbias
-    extra[12,:,:,0] = (extra[6,:,:,0])/extra[7,:,:,0]
+    extra[12,:,:,0] = (extra[6,:,:,0])/extra[7,:,:,0] #vtec
     print(recbias)
     data['TEC'] = extra[6] #TEC adjusted with receiver bias
     data['vTEC'] = extra[12] #vTEC adjusted with receiver bias
     data['cslip'] = extra[13]
     
-    d = {'TEC':[],'az2sat':[],'el2sat':[],'recBias':[],'satnum':[],'vTEC':[],'nTEC':[],'lol':[]}
+    d = {'TEC':[],'az2sat':[],'el2sat':[],'recBias':[],'satnum':[],
+         'vTEC':[],'nTEC':[],'lol':[],'raw':[]}
     dataloc = []
     times = []
     if(satlist==None): satlist = data.items
     for sv in satlist:
-        msk = np.isfinite(data['TEC',sv,:,'data'])
-        lol = data[['L1','L2','C1','P2'],sv,msk,'lli']
+        msk = np.isfinite(data['TEC',sv,:,'data']) #mask of times with data
+        phase = 2.85E9*(data['L1',sv,:,'data']/f1-data['L2',sv,:,'data']/f2)
+        d['raw'].append(phase[msk])        
+        lol = data[['L1','L2','C1','P2'],sv,msk,'lli'] 
         lol[np.isnan(lol)] = 0
         lol = lol.astype(int)
         lol = np.logical_or.reduce((lol%2).T)
-        lol = lol.astype(int)
-        greg = np.isfinite(data['cslip',sv,msk,'data'].values)
-        lol[greg] += 2
+        lol = lol.astype(int) #store all hardware-determined loss of lock as a 1
+        greg = np.isfinite(data['cslip',sv,msk,'data'].values) #mask of software determined cycle slips
+        lol[greg] += 2 #add 2 to all times with cycle slips, HW=1, SW=2, both=3
         d['lol'].append(lol)
         d['TEC'].append(data['TEC',sv,:,'data'][msk])
         d['az2sat'].append(data['Az',sv,:,'data'][msk])
@@ -822,6 +845,7 @@ def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,p
         dataloc.append(data[['pplat','pplon','ppalt'],sv,:,'data'][msk])
         times.append(np.hstack((data.major_axis[msk][:,None],data.major_axis[msk][:,None]+1000000000)))
     
+    d['raw'] = np.hstack(d['raw'])    
     d['lol'] = np.hstack(d['lol'])
     d['TEC'] = np.hstack(d['TEC'])
     d['az2sat'] = np.hstack(d['az2sat'])
@@ -842,9 +866,9 @@ def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,p
     return (d,coordnames,dataloc,sensorloc,times)
 
 if __name__== '__main__':
-    gd = GDfromRinex('/home/greg/Documents/greg/rinex/mah72800.15o',
+    gd = GDfromRinex('/home/greg/Documents/greg/rinex/mah62800.15o',
                  '/home/greg/Documents/greg/brdc2800.15n',
                  '/home/greg/Documents/greg/jplg2800.15i',
                  '/home/greg/Documents/greg/P1C11510.DCB',
-                 '/home/greg/Documents/greg/rinex/mah72800.h5',
+                 '/home/greg/Documents/greg/rinex/mah62800.h5',
                  False,130,[9,23])

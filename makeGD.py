@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Aug 25 09:33:02 2016
-
-@author: greg
+This script can be run from the command line and it creates geodata h5s 
+based on which satellites I want and how high I want the IPP
+(ionospheric peirce point)
+NOTE: this only works on my computer, all the directories are specified 
+only on my computer. if someone else wants to use this, they must change 
+the file paths
 """
 
 import GeoData.GeoData as GD
@@ -21,7 +24,7 @@ if __name__== '__main__':
     descr = "this will create GeoData h5s from rinex/h5 at a certain pph"
     
     p = ArgumentParser(description=descr)
-    p.add_argument('-s','--sats',help='satellites to include',default=None)
+    p.add_argument('-s','--sats',help='satellites to include',default='9 23')
     p.add_argument("-a", "--height",help='pierce point height',default=130)
     p = p.parse_args()
     
@@ -34,7 +37,8 @@ if __name__== '__main__':
         a = GD.GeoData(GDfromRinex,(rinexfile,navfile,satfile,C1BiasFile,h5file,False,height,satlist))
         fn = '/home/greg/Documents/greg/h5files/'+str(height)+'km/'+site+'GD'
         for i in satlist:
-            fn += 'sat'+str(i)+'.h5'
+            fn += 'sat'+str(i)
+        fn += '.h5'
         a.write_h5(fn)
     
     

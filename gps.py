@@ -369,8 +369,8 @@ def scan(lines):
             if(numsvs>12):
                 sp=[]
                 for s in range(numsvs):
-                    sp.append(int(lines[i][33+(s%12)*3:35+(s%12)*3]))
                     if s==12: i+= 1
+                    sp.append(int(lines[i][33+(s%12)*3:35+(s%12)*3]))
                 sats.append(sp)
             else:
                 sats.append([int(lines[i][33+s*3:35+s*3]) for s in range(numsvs)])
@@ -396,8 +396,10 @@ def processBlocks(lines,header,obstimes,svset,headlines,sats):
     blocks = np.nan*np.ones((len(obstypes),max(svset)+1,len(obstimes),3))
     
     for i in range(len(headlines)):
+        if(i==14919):
+            pass
         linesinblock = len(sats[i])*int(np.ceil(header['# / TYPES OF OBSERV'][0]/5))
-        block = ''.join(lines[headlines[i]+1:headlines[i]+linesinblock+1])
+        block = ''.join(lines[headlines[i]+1+int(len(sats[i])/12):headlines[i]+linesinblock+1+int(len(sats[i])/12)])
         bdf = _block2df(block,obstypes,sats[i],len(sats[i]))
         blocks[:,np.asarray(sats[i],int),i,:] = bdf
         
@@ -866,9 +868,13 @@ def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,p
     return (d,coordnames,dataloc,sensorloc,times)
 
 if __name__== '__main__':
-    gd = GDfromRinex('/home/greg/Documents/greg/rinex/mah62800.15o',
+    """
+    gd = GDfromRinex('/home/greg/Documents/greg/rinex/mah52800.15o',
                  '/home/greg/Documents/greg/brdc2800.15n',
                  '/home/greg/Documents/greg/jplg2800.15i',
                  '/home/greg/Documents/greg/P1C11510.DCB',
-                 '/home/greg/Documents/greg/rinex/mah62800.h5',
+                 '/home/greg/Documents/greg/rinex/mah52800.h5',
                  False,130,[9,23])
+    """
+    head,data = rinexobs('/home/greg/Documents/greg/rinex/mah52800.15o',
+                         returnHead=True)

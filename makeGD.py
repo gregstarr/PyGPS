@@ -34,7 +34,7 @@ if __name__== '__main__':
     for h5file in files:
         site = h5file.split('/')[-1][:4]
         rinexfile = glob('/home/greg/Documents/greg/rinex/{}*.15o'.format(site))[0]
-        a = GD.GeoData(GDfromRinex,(rinexfile,navfile,satfile,C1BiasFile,h5file,False,height,satlist))
+        a = GD.GeoData(GDfromRinex,(rinexfile,navfile,satfile,C1BiasFile,h5file,True,height,satlist))
         fn = '/home/greg/Documents/greg/h5files/'+str(height)+'km/'+site+'GD'
         for i in satlist:
             fn += 'sat'+str(i)

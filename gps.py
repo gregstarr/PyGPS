@@ -81,10 +81,9 @@ def getTec(data,sat_num,data_interval,satbias=None):
     tec_difference = np.array(sorted(phase_tec-range_tec))
     tec_difference = tec_difference[np.isfinite(tec_difference)]
     median_difference = tec_difference[int(len(tec_difference)/2)]
-    difference_width = tec_difference[int(len(tec_difference)*.75)]
-                                      -tec_difference[int(len(tec_difference)*.25)]
+    difference_width = tec_difference[int(len(tec_difference)*.75)]-tec_difference[int(len(tec_difference)*.25)]
     median_error = difference_width/np.sqrt(len(tec_difference))
-    tec = phase - median_difference
+    tec = phase_tec - median_difference
 
     return tec,median_error
 
@@ -857,12 +856,13 @@ def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,p
 
 if __name__== '__main__':
     """
-    gd = GDfromRinex('/home/greg/Documents/greg/rinex/mah52800.15o',
+    gd = GDfromRinex('/home/greg/Documents/greg/rinex/ma132800.15o',
                  '/home/greg/Documents/greg/brdc2800.15n',
                  '/home/greg/Documents/greg/jplg2800.15i',
                  '/home/greg/Documents/greg/P1C11510.DCB',
-                 '/home/greg/Documents/greg/rinex/mah52800.h5',
-                 False,130,[9,23])
+                 None,
+                 False,130,[5])
     """
-    head,data = rinexobs('/home/greg/Documents/greg/rinex/mah52800.15o',
-                         returnHead=True)
+    head,data = rinexobs('/home/greg/Documents/greg/rinex/ma132800.15o',
+                         returnHead=True,writeh5=True)
+    

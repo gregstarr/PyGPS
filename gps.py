@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
 Greg Starr
 this is based mostly on Bill Rideout's tec.py
@@ -6,24 +7,25 @@ numpy because I like it better, the rinex
 reading was made by Michael Hirsch and Greg Starr
 """
 from __future__ import division,absolute_import,print_function
+from pathlib import Path
 import numpy as np
 from datetime import datetime
 from pandas import DataFrame,Series,Panel4D
 from pandas.io.pytables import read_hdf
-from os.path import splitext,expanduser,getsize
 from io import BytesIO
 import time
-from pymap3d.coordconv3d import ecef2geodetic,ecef2aer,aer2geodetic
+#
+from pymap3d import ecef2geodetic,ecef2aer,aer2geodetic
 
 
 f1 = 1575.42E6 #MHz
 f2 = 1227.6E6  #MHz
-    
+
 def getIntervals(data,sat_num,maxgap=3,maxjump=1.2):
     """
     scans through the phase tec of a satellite and determines where "good"
     intervals begin and end
-    inputs: 
+    inputs:
         data - Panel4D with dimensions (parameter,satellite number,time,data/lli/ssi)
         sat_num - the number of the satellite to get good intervals for
         maxgap - maximum number of nans before starting new interval
@@ -53,13 +55,13 @@ def getIntervals(data,sat_num,maxgap=3,maxjump=1.2):
             intervals.append((beginning,last))
     intervals=[(data.major_axis[time[0]],data.major_axis[time[1]]) for time in intervals]
     return intervals
-        
+
 
 def getTec(data,sat_num,data_interval,satbias=None):
     """
     calculates slant TEC using phase tec shifted by the median difference
     between phase tec and pseudorange tec
-    inputs: 
+    inputs:
         data - Panel4D with dimensions (parameter,satellite number,time,data/lli/ssi)
         sat_num - the number of the satellite to calculate TEC for
         data_interval - the interval made from getInterval(), it's a 2-tuple
@@ -74,10 +76,10 @@ def getTec(data,sat_num,data_interval,satbias=None):
         range_tec = (2.85E9/3.0E8)*(
                     data['P2',sat_num,data_interval[0]:data_interval[1],'data']
                     -data['C1',sat_num,data_interval[0]:data_interval[1],'data'])
-        
+
     phase_tec=2.85E9*(data['L1',sat_num,data_interval[0]:data_interval[1],'data']/f1
-                      -data['L2',sat_num,data_interval[0]:data_interval[1],'data']/f2)        
-        
+                      -data['L2',sat_num,data_interval[0]:data_interval[1],'data']/f2)
+
     tec_difference = np.array(sorted(phase_tec-range_tec))
     tec_difference = tec_difference[np.isfinite(tec_difference)]
     median_difference = tec_difference[int(len(tec_difference)/2)]
@@ -126,9 +128,10 @@ class satelliteBias:
         indicatorStr = 'DIFFERENTIAL CODE BIASES'
         # conversionFactor in TECu
         conversionFactor = -0.463*6.158 # diff ns -> meters -> tec
-        f = open(satFile)
-        lines = f.readlines()
-        f.close()
+
+        with satFile.open('r') as f:
+            lines = f.readlines()
+
         lineFound = 0 # indicates right line found
         dataFound = 0 # indicates at least one line of data found
         for line in lines:
@@ -154,9 +157,7 @@ class satelliteBias:
                 except:
                     if dataFound == 0:
                         # no valid lines found
-                        raise(IOError,
-                              'No valid data found after indicator in %s'
-                              % (satFile))
+                        raise IOError('No valid data found after indicator in %s' % (satFile))
                     else:
                         return
         # if we got here, the indicator wasn't found, or the data was the last line in the file
@@ -173,11 +174,12 @@ class satelliteBias:
         """
         conversionFactor = -0.463*6.158 # diff ns -> meters -> tec
         # allow no C1BiasFile for case where normal bias just being verified
-        if (C1BiasFile == None):
+        if C1BiasFile is None:
             return
-        f = open(C1BiasFile)
-        lines = f.readlines()
-        f.close()
+
+        with C1BiasFile.open('r') as f:
+            lines = f.readlines()
+
         # print warning if no data found
         dataFound = False
         for line in lines:
@@ -202,11 +204,12 @@ class satelliteBias:
         """
         conversionFactor = -0.463*6.158 # diff ns -> meters -> tec
         # allow no C1BiasFile for case where normal bias just being verified
-        if (L2C2BiasFile == None):
+        if L2C2BiasFile is None:
             return
-        f = open(L2C2BiasFile)
-        lines = f.readlines()
-        f.close()
+
+        with L2C2BiasFile.open('r') as f:
+            lines = f.readlines()
+
         # print warning if no data found
         dataFound = False
         for line in lines:
@@ -236,32 +239,32 @@ def rinexobs(rinexfile,h5file=None,returnHead=False,writeh5=False):
         returnHead - Boolean, if true then return the header data first
         writeh5 - boolean, if true then write an h5 file with the same path
                   as the rinex file but ending in .h5 instead
-                  
+
     outputs:
         header(optional) - header data in a dictionary
         data - Panel4D (parameter,satellite number,time,data/lli/ssi)
     """
-    
+
     #open file, get header info, possibly speed up reading data with a premade h5 file
-    stem,ext = splitext(expanduser(rinexfile))
-    with open(rinexfile,'r') as f:
+    rinexfile = Path(rinexfile).expanduser()
+    with rinexfile.open('r') as f:
         t=time.time()
         lines = f.read().splitlines(True)
         lines.append('')
         header,version,headlines,obstimes,sats,svset = scan(lines)
-        print('{} is a RINEX {} file, {} kB.'.format(rinexfile,version,getsize(rinexfile)/1000.0))
+        print('{} is a RINEX {} file, {} kB.'.format(rinexfile,version,rinexfile.stat().st_size/1000))
         if h5file==None:
             data = processBlocks(lines,header,obstimes,svset,headlines,sats)
         else:
             data = read_hdf(h5file,key='data')
-        print("finished in {0:.2f} seconds".format(time.time()-t))
-        
+        print("finished in {:.2f} seconds".format(time.time()-t))
+
     #write an h5 file if specified
     if writeh5:
-        h5fn = stem + '.h5'
+        h5fn = rinexfile.with_suffix('.h5')
         print('saving OBS data to {}'.format(h5fn))
         data.to_hdf(h5fn,key='data',mode='w',format='table')
-        
+
     #return info including header if desired
     if returnHead:
         return header,data
@@ -271,8 +274,8 @@ def rinexobs(rinexfile,h5file=None,returnHead=False,writeh5=False):
 def scan(lines):
     """
     this function sets up the rinex file parsing by quickly running through
-    the file, looking for the line at which each time block starts, the time 
-    of each block, the satellites in view at each time, and overall what 
+    the file, looking for the line at which each time block starts, the time
+    of each block, the satellites in view at each time, and overall what
     satellites are in the rinex file
     inputs:
         lines - list containing each line in the rinex file as a string
@@ -281,13 +284,13 @@ def scan(lines):
         verRinex - the rinex file's version
         headlines - a list of ints, the index of lines where each time block
                     starts
-        obstimes - list of times corresponding to each block, same length as 
+        obstimes - list of times corresponding to each block, same length as
                     headlines
-        sats - the satellites in view at each time, should be same length 
+        sats - the satellites in view at each time, should be same length
                as headlines
         svset - the set of all the satellites in the rinex file
     """
-    header={}        
+    header={}
     eoh=0
     for i,line in enumerate(lines):
         if "END OF HEADER" in line:
@@ -302,7 +305,7 @@ def scan(lines):
     header['# / TYPES OF OBSERV'] = header['# / TYPES OF OBSERV'].split()
     header['# / TYPES OF OBSERV'][0] = int(header['# / TYPES OF OBSERV'][0])
     header['INTERVAL'] = float(header['INTERVAL'])
-        
+
     headlines=[]
     obstimes=[]
     sats=[]
@@ -325,7 +328,7 @@ def scan(lines):
                 sats.append(sp)
             else:
                 sats.append([int(lines[i][33+s*3:35+s*3]) for s in range(numsvs)])
-        
+
             i+=numsvs*int(np.ceil(header['# / TYPES OF OBSERV'][0]/5))+1
         else:
             #there was a comment or some header info
@@ -349,19 +352,19 @@ def processBlocks(lines,header,obstimes,svset,headlines,sats):
     outputs:
         blocks - the Panel4D with all the data, see above for organization
     """
-    
+
     obstypes = header['# / TYPES OF OBSERV'][1:]
     blocks = np.nan*np.ones((len(obstypes),max(svset)+1,len(obstimes),3))
-    
+
     for i in range(len(headlines)):
         linesinblock = len(sats[i])*int(np.ceil(header['# / TYPES OF OBSERV'][0]/5))
         block = ''.join(lines[headlines[i]+1+int(len(sats[i])/13):headlines[i]
                               +linesinblock+1+int(len(sats[i])/13)])
         bdf = _block2df(block,obstypes,sats[i],len(sats[i])) #
         blocks[:,np.asarray(sats[i],int),i,:] = bdf
-        
+
     """
-    it is way faster to turn a big numpy array into a Panel4D than 
+    it is way faster to turn a big numpy array into a Panel4D than
     to make the Panel4D first and assign it one cell at a time,
     Panel4Ds are slow, it is best to use numpy when possible
     """
@@ -371,13 +374,13 @@ def processBlocks(lines,header,obstimes,svset,headlines,sats):
                      major_axis=obstimes,
                      minor_axis=['data','lli','ssi'])
     blocks = blocks[:,list(svset),:,:]
-    
-    return blocks       
-        
+
+    return blocks
+
 
 def _obstime(fol):
     """
-    turns a listed date collected from the rinex file into a datetime, 
+    turns a listed date collected from the rinex file into a datetime,
     this is just a utility function
     """
     year = int(fol[0])
@@ -418,12 +421,12 @@ def readRinexNav(fn,writeh5=None):
     and asarray().reshape() to the final result, but I did it frame by frame.
     http://gage14.upc.es/gLAB/HTML/GPS_Navigation_Rinex_v2.11.html
     """
-    stem,ext = splitext(expanduser(fn))
+    fn = Path(fn).expanduser()
     startcol = 3 #column where numerical data starts
     nfloat=19 #number of text elements per float data number
     nline=7 #number of lines per record
 
-    with open(expanduser(fn),'r') as f:
+    with fn.open('r') as f:
         #find end of header, which has non-constant length
         while True:
             if 'END OF HEADER' in f.readline(): break
@@ -471,14 +474,14 @@ def readRinexNav(fn,writeh5=None):
     nav['sv'] = Series(np.asarray(sv,int), index=nav.index)
 
     if writeh5:
-        h5fn = stem + '.h5'
+        h5fn = fn.with_suffix('.h5')
         print('saving NAV data to {}'.format(h5fn))
         nav.to_hdf(h5fn,key='NAV',mode='a',complevel=6,append=False)
 
     return nav
 
 def getSatXYZ(nav,sv,times):
-    
+
     """
     getSatelliteXYZ returns the satellite XYZ as a tuple at the inputted times
        inputs are rinex navigation data, satellite number, and list of times
@@ -486,7 +489,7 @@ def getSatXYZ(nav,sv,times):
     Algorithm: Based on http://web.ics.purdue.edu/~ecalais/teaching/geodesy/EAS_591T_2003_lab_4.htm
     also based on Bill Rideout's tec.py
     """
-    allSvInfo = nav[nav['sv']==sv] 
+    allSvInfo = nav[nav['sv']==sv]
     timesarray = np.asarray(times,dtype='datetime64[ms]')
     navtimes = np.asarray(allSvInfo.index,dtype='datetime64[ms]')
     bestephind = np.array([np.argmin(abs(navtimes-t)) for t in timesarray])
@@ -497,11 +500,11 @@ def getSatXYZ(nav,sv,times):
     # constants
     GM = 3986005.0E8 # universal gravational constant
     OeDOT = 7.2921151467E-5
-    
+
     #Basic Parameters
     t = info['gpstime']-info['TimeEph']
     mu = info['M0']+t*(np.sqrt(GM/info['sqrtA']**6)+info['DeltaN'])
-    Ek = solveIter(mu,info['Eccentricity'])  
+    Ek = solveIter(mu,info['Eccentricity'])
     Vk = np.asarray(np.arctan2(np.sqrt(1.0-info['Eccentricity'])*np.sin(Ek),
                                np.cos(Ek)-info['Eccentricity']),float)
     PhiK = Vk + info['omega']
@@ -512,7 +515,7 @@ def getSatXYZ(nav,sv,times):
          +info['Crs']*np.sin(2.0*PhiK)+info['Crc']*np.cos(2.0*PhiK),float)
     i = np.asarray(info['Io']+info['IDOT']*t+info['CIS']*np.sin(2.0*PhiK)
          +info['Cic']*np.cos(2.0*PhiK),float)
-    
+
     #Compute the right ascension
     Omega = np.asarray(info['OMEGA']+(info['OMEGA DOT']-OeDOT)*t-(OeDOT*info['TimeEph']),float)
     #Convert satellite position from orbital frame to ECEF frame
@@ -533,10 +536,10 @@ def getSatXYZ(nav,sv,times):
     R31 = sinomega*sini
     R32 = cosomega*sini
     #R33 = np.cos(i)
-          
+
     xyz = np.zeros((len(times),3))
     rv = np.column_stack((r*cosVk,r*sinVk,np.zeros(r.shape)))
-    
+
     R = np.empty((rv.shape[0],3,3))
     R[:,0,0] = R11
     R[:,0,1] = R12
@@ -547,13 +550,13 @@ def getSatXYZ(nav,sv,times):
     R[:,2,0] = R31
     R[:,2,1] = R32
     R[:,2,2] = 0
-    
+
     #R = np.array([[R11[i],R12[i],0],
     #              [R21[i],R22[i],0],
     #              [R31[i],R32[i],0]])
     for i in range(len(times)): #THIS IS THE SLOWEST PART NOW
         xyz[i,:] = (R[i,:,:].dot(rv[i,:]))
-        
+
     return xyz
 
 def getGpsTime(dt):
@@ -578,7 +581,7 @@ def solveIter(mu,e):
     thisEnd = np.asarray(mu + 1.01*e)
     bestGuess = np.zeros(mu.shape)
 
-    for i in range(5): 
+    for i in range(5):
         minErr = 10000*np.ones(mu.shape)
         for j in range(5):
             thisGuess = thisStart + j*(thisEnd-thisStart)/10.0
@@ -586,12 +589,12 @@ def solveIter(mu,e):
             mask = thisErr<minErr
             minErr[mask] = thisErr[mask]
             bestGuess[mask] = thisGuess[mask]
-        
+
         # reset for next loop
         thisRange = thisEnd - thisStart
         thisStart = bestGuess - thisRange/10.0
         thisEnd = bestGuess + thisRange/10.0
-        
+
     return(bestGuess)
 
 def getZ(el):
@@ -605,7 +608,7 @@ def getZ(el):
     """
     fit = 0.95
     term1 = 1 - (fit*np.cos(np.radians(el)))**2
-    return 1.0 / np.sqrt(term1) 
+    return 1.0 / np.sqrt(term1)
 
 def getZ2(el,recpos):
     """
@@ -619,42 +622,42 @@ def getZ2(el,recpos):
     a = np.linalg.norm(recpos)/1000
     h=300
     s = 200
-    Z = (np.sqrt((a+h+s)**2-(a*np.cos(np.radians(el[el>30])))**2) 
+    Z = (np.sqrt((a+h+s)**2-(a*np.cos(np.radians(el[el>30])))**2)
          -np.sqrt((a+h)**2-(a*np.cos(np.radians(el[el>30])))**2))/s
-    
-    return Z    
+
+    return Z
 
 
 def minScalErr(stec,el,z,thisBias):
     """
     this determines the slope of the vTEC vs. Elevation line, which
-    should be minimized in the minimum scalloping technique for 
+    should be minimized in the minimum scalloping technique for
     receiver bias removal
     inputs:
         stec - time indexed Series of slant TEC values
         el - corresponding elevation values, also Series
-        z - mapping function values to convert to vTEC from entire file, may 
+        z - mapping function values to convert to vTEC from entire file, may
             contain nans, Series
         thisBias - the bias to be tested and minimized
     """
-            
+
     intel=np.asarray(el[stec.index],int) # bin the elevation values into int
     sTEC=np.asarray(stec,float)
     zmap = z[stec.index]
     c=np.array([(i,np.average((sTEC[intel==i]-thisBias)
                               /zmap[intel==i])) for i in np.unique(intel) if i>30])
-    
+
     return np.polyfit(c[:,0],c[:,1],1)[0]
-     
+
 def getPP(satpos,sv,recpos,pph,err=1.0):
     """
     get az and el to the satellite and repeatedly increase the range,
     converting to LLA each time to check the altitude. Stop when all
-    the altitudes are within err of pph. Inputs satellite position 
+    the altitudes are within err of pph. Inputs satellite position
     array in ECEF, satellite number, receiver position in ECEF, pierce point
     height in km and error in km if you want.
     """
-    
+
     rlat,rlon,ralt = ecef2geodetic(recpos)
     sataz,satel,satr = ecef2aer(satpos[:,0],satpos[:,1],satpos[:,2],rlat,rlon,ralt)
 
@@ -662,11 +665,11 @@ def getPP(satpos,sv,recpos,pph,err=1.0):
     pplat,pplon,ppalt = aer2geodetic(sataz,satel,r,rlat,rlon,ralt)
     mask = (ppalt/1000 - pph) < 0
 
-    while np.sum(mask)>0:  
+    while np.sum(mask)>0:
         r[mask]+=100
         pplat,pplon,ppalt = aer2geodetic(sataz,satel,r*1000,rlat,rlon,ralt)
         mask = (ppalt/1000 - pph) < 0
-    
+
     sRange = r - 100.0
     eRange = r
     count = 0
@@ -677,26 +680,26 @@ def getPP(satpos,sv,recpos,pph,err=1.0):
         mask = ppalt/1000>pph
         eRange[mask] = mRange[mask]
         sRange[~mask] = mRange[~mask]
-    
+
         if(count>100):
             raise TypeError('going too long')
             break
-            
+
     ppalt = pph*1000
-    
+
     return pplat,pplon,ppalt
 
 def minScalBias(data,recpos):
     """
     This function calculates receiver bias via the minimum scalloping
     method. The idea is that vertical TEC shouldn't be elevation dependent
-    so the algorithm tests different bias values to minimuze the slope of the 
+    so the algorithm tests different bias values to minimuze the slope of the
     vTEC vs. elevation line. Outputs the bias averaged from all satellites at
     all times in the rinexobs data
     inputs: rinexobs data and receiver position in ecef i think
     outputs: average bias for the receiver
     """
-    
+
     SvsUsed=0
     bias=0
     for sv in data.items:
@@ -717,7 +720,7 @@ def minScalBias(data,recpos):
         for i in range(10):
             err[i] = minScalErr(stec[abs(stec)<100],el,z,startval-.5+.1*i)
         bias += (np.argmin(abs(err))-5)*.1+startval
-        
+
     return bias/SvsUsed
 
 def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,pph=350,satlist=None):
@@ -754,11 +757,11 @@ def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,p
             teclist.append(tec)
             timelist.append(tec.index)
             errlist.append(err*np.ones(len(tec)))
-            pos+=len(tec) 
-            
-        if len(teclist)==0 or len(timelist)==0:  
+            pos+=len(tec)
+
+        if len(teclist)==0 or len(timelist)==0:
             continue
-                        
+
         stec = Series(np.hstack((p for p in teclist)),index=np.hstack((t for t in timelist)))
         ntec = Series(np.hstack((j for j in errlist)),index=np.hstack((t for t in timelist)))
         for i,p in enumerate(rbeg):
@@ -766,10 +769,10 @@ def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,p
         rbeg=np.array(rbeg)
         ntec = ntec[~np.isnan(stec)]
         stec = stec[~np.isnan(stec)]
-        
+
         satpos = getSatXYZ(nav,sv,stec.index)
         az,el,r = ecef2aer(satpos[:,0],satpos[:,1],satpos[:,2],rlat,rlon,ralt)
-        satpossph = np.vstack([az,el,r/1000]).T 
+        satpossph = np.vstack([az,el,r/1000]).T
         goodtimes = np.in1d(data.major_axis,stec.index) #times for satellite with data
         svi = list(data.items).index(sv) # matrix column corresponding to satellite
         extra[:3,svi,goodtimes,0] = satpos.T #XYZ
@@ -784,7 +787,7 @@ def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,p
         extra[11,svi,goodtimes,0] = ntec.values #err tec
         splittimes = np.where(goodtimes)[0][rbeg]
         extra[13,svi,splittimes,0] = 1
-                
+
     data['X'] = extra[0]
     data['Y'] = extra[1]
     data['Z'] = extra[2]
@@ -806,7 +809,7 @@ def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,p
     data['TEC'] = extra[6] #TEC adjusted with receiver bias
     data['vTEC'] = extra[12] #vTEC adjusted with receiver bias
     data['cslip'] = extra[13]
-    
+
     d = {'TEC':[],'az2sat':[],'el2sat':[],'recBias':[],'satnum':[],
          'vTEC':[],'nTEC':[],'lol':[],'raw':[]}
     dataloc = []
@@ -815,8 +818,8 @@ def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,p
     for sv in satlist:
         msk = np.isfinite(data['TEC',sv,:,'data']) #mask of times with data
         phase = 2.85E9*(data['L1',sv,:,'data']/f1-data['L2',sv,:,'data']/f2)
-        d['raw'].append(phase[msk])        
-        lol = data[['L1','L2','C1','P2'],sv,msk,'lli'] 
+        d['raw'].append(phase[msk])
+        lol = data[['L1','L2','C1','P2'],sv,msk,'lli']
         lol[np.isnan(lol)] = 0
         lol = lol.astype(int)
         lol = np.logical_or.reduce((lol%2).T)
@@ -833,8 +836,8 @@ def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,p
         d['nTEC'].append(data['nTEC',sv,:,'data'][msk])
         dataloc.append(data[['pplat','pplon','ppalt'],sv,:,'data'][msk])
         times.append(np.hstack((data.major_axis[msk][:,None],data.major_axis[msk][:,None]+1000000000)))
-    
-    d['raw'] = np.hstack(d['raw'])    
+
+    d['raw'] = np.hstack(d['raw'])
     d['lol'] = np.hstack(d['lol'])
     d['TEC'] = np.hstack(d['TEC'])
     d['az2sat'] = np.hstack(d['az2sat'])
@@ -846,12 +849,12 @@ def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,p
     coordnames = 'WGS84'
     dataloc = np.vstack(dataloc)
     sensorloc = np.nan*np.ones(3)
-    times = np.vstack(times)    
-    
+    times = np.vstack(times)
+
     t0 = np.datetime64(datetime(1970,1,1),'ns')
     times = (times-t0).astype(float)/1.0E9
-    
-    
+
+
     return (d,coordnames,dataloc,sensorloc,times)
 
 if __name__== '__main__':
@@ -863,6 +866,5 @@ if __name__== '__main__':
                  None,
                  False,130,[5])
     """
-    head,data = rinexobs('/home/greg/Documents/greg/rinex/ma132800.15o',
+    head,data = rinexobs('Examples/data/mah22800.15o',
                          returnHead=True,writeh5=True)
-    

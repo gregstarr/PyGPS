@@ -48,6 +48,7 @@ if __name__== '__main__':
             tail += 'sat'+str(i)
 
         fn =  dpath/('h5files/{}km'.format(height))
+        fn.mkdir(parents=True,exist_ok=True)
 
         fn = fn / '{}GD{}.h5'.format(site, tail)
 

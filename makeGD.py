@@ -51,5 +51,7 @@ if __name__== '__main__':
 
         fn = fn / '{}GD{}.h5'.format(site, tail)
 
-        a.write_h5(fn)
+        print('writing {}'.format(fn))
+
+        a.write_h5(str(fn))
 

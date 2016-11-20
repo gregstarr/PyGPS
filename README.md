@@ -1,4 +1,8 @@
 # PyGPS
+
+This project is merging with a more versatile ionosphere data processing project, found here:
+[GeoScience Ionospheric Tool](https://github.com/aldebaran1/gsit)
+
 PyGPS is a python codebase for working with GPS data.
 It can be used for:
 
@@ -8,7 +12,7 @@ It can be used for:
 * calculating pierce point locations
 * removing satellite and receiver bias.
 
-All this code was written under the larger goal of integrating GPS data processing into [GeoData](https://www.github.com/jswoboda/GeoDataPython) which is John Swoboda’s open source ionosphere data processing project.
+All this code was written under the larger goal of integrating GPS data processing into [GeoData](https://www.github.com/jswoboda/GeoDataPython) which is John Swobodaâ€™s open source ionosphere data processing project.
 The code culminates in the function `GDfromRinex()` which runs through
 the entire data processing algorithm from RINEX file to GeoData object for one receiver.
 The basic procedure is highlighted below:

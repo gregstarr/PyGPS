@@ -1,7 +1,7 @@
-# PyGPS
-
 This project is merging with a more versatile ionosphere data processing project, found here:
 [GeoScience Ionospheric Tool](https://github.com/aldebaran1/gsit)
+
+#PyGPS
 
 PyGPS is a python codebase for working with GPS data.
 It can be used for:

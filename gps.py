@@ -480,6 +480,71 @@ def readRinexNav(fn,writeh5=None):
 
     return nav
 
+def readRinexNav3(fn,writeh5=None):
+    """
+    Michael Hirsch
+    It may actually be faster to read the entire file via f.read() and then .split()
+    and asarray().reshape() to the final result, but I did it frame by frame.
+    http://gage14.upc.es/gLAB/HTML/GPS_Navigation_Rinex_v2.11.html
+    """
+    fn = Path(fn).expanduser()
+    startcol = 4 #column where numerical data starts
+    nfloat=19 #number of text elements per float data number
+    nline=7 #number of lines per record
+
+    with fn.open('r') as f:
+        #find end of header, which has non-constant length
+        while True:
+            if 'END OF HEADER' in f.readline(): break
+        #handle frame by frame
+        sv = []; epoch=[]; raws=''
+        while True:
+            headln = f.readline()
+            if not headln: break
+            #handle the header
+            sv.append(headln[1:4].strip())
+            year = int(headln[4:8])
+            if 80<= year <=99:
+                year+=1900
+            elif year<80: #good till year 2180
+                year+=2000
+            epoch.append(datetime(year =year,
+                                  month   =int(headln[9:11]),
+                                  day     =int(headln[12:14]),
+                                  hour    =int(headln[15:17]),
+                                  minute  =int(headln[18:20]),
+                                  second  =int(headln[21:23])))
+            """
+            now get the data.
+            Use rstrip() to chomp newlines consistently on Windows and Python 2.7/3.4
+            Specifically [:-1] doesn't work consistently as .rstrip() does here.
+            """
+            raw = (headln[24:].rstrip() +
+                   ''.join(f.readline()[startcol:].rstrip() for _ in range(nline-1))
+                   +f.readline()[startcol:43].rstrip())
+
+            raws += raw + '\n'
+
+    raws = raws.replace('D','E')
+
+    strio = BytesIO(raws.encode())
+    darr = np.genfromtxt(strio,delimiter=nfloat)
+
+    nav= DataFrame(darr, epoch,
+               ['SVclockBias','SVclockDrift','SVclockDriftRate','IODE',
+                'Crs','DeltaN','M0','Cuc','Eccentricity','Cus','sqrtA','TimeEph',
+                'Cic','OMEGA','CIS','Io','Crc','omega','OMEGA DOT','IDOT',
+                'CodesL2','GPSWeek','L2Pflag','SVacc','SVhealth','TGD','IODC',
+                'TransTime','FitIntvl'])
+    nav['sv'] = Series(np.asarray(sv,int), index=nav.index)
+
+    if writeh5:
+        h5fn = fn.with_suffix('.h5')
+        print('saving NAV data to {}'.format(h5fn))
+        nav.to_hdf(h5fn,key='NAV',mode='a',complevel=6,append=False)
+
+    return nav
+
 def getSatXYZ(nav,sv,times):
 
     """
@@ -858,13 +923,6 @@ def GDfromRinex(rinexfile,navfile,satFile,C1BiasFile,h5file=None,writeh5=False,p
     return (d,coordnames,dataloc,sensorloc,times)
 
 if __name__== '__main__':
-    """
-    gd = GDfromRinex('/home/greg/Documents/greg/rinex/ma132800.15o',
-                 '/home/greg/Documents/greg/brdc2800.15n',
-                 '/home/greg/Documents/greg/jplg2800.15i',
-                 '/home/greg/Documents/greg/P1C11510.DCB',
-                 None,
-                 False,130,[5])
-    """
+    
     head,data = rinexobs('Examples/data/mah22800.15o',
                          returnHead=True,writeh5=True)

@@ -1,7 +1,11 @@
+# NOTE 8/17/2020:
+
+This project is not currently maintained. For reading rinex files of all types, see https://github.com/geospace-code/georinex
+
+# PyGPS
+
 This project is merging with a more versatile ionosphere data processing project, found here:
 [GeoScience Ionospheric Tool](https://github.com/aldebaran1/gsit)
-
-#PyGPS
 
 PyGPS is a python codebase for working with GPS data.
 It can be used for:
